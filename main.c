@@ -58,8 +58,33 @@ void emular_ciclo(struct Chip* c)
             c->PC = NNN;
             break;
         
+        case 0x6000:
+            //Comando 6XNN: Establece Vx en NN
+            c->V[X] = NN;
+            break;
+        
+        case 0x7000:
+            //Comando 7XNN: Suma NN a Vx
+            c->V[X] =+ NN;
+            break;
+        
+        case 0x2000:
+            //Comando 2NNN: Llama a una subrutina.
+            //1. Guardar donde estabamos, el stack guarda la direccion actual del PC
+            c->stack[c->SP] = c->PC;
+            //2. Mover el puntero al siguiente renglon vacio del stack
+            c->SP += 1; //Tambien podria usar c->SP++
+            //3. JUMP, el procesador viaja a la subrutina
+            c->PC = NNN;
+            break;
+
+        case 0x0000:
+            c->PC = c->stack[c->SP];
+            c->PC = NNN;
+            break;
+
         default:
-        printf("Insstruccion no reconocida: 0x%X\n", instruccion);
+        printf("Instruccion no reconocida: 0x%X\n", instruccion);
         break;
     }
 }
