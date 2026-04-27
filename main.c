@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <time.h>
 
 /*Defino la estructura del chip*/
 
@@ -65,7 +66,7 @@ void emular_ciclo(struct Chip* c)
         
         case 0x7000:
             //Comando 7XNN: Suma NN a Vx
-            c->V[X] =+ NN;
+            c->V[X] += NN;
             break;
         
         case 0x2000:
@@ -79,9 +80,26 @@ void emular_ciclo(struct Chip* c)
             break;
 
         case 0x0000:
-            c->PC = c->stack[c->SP];
-            c->PC = NNN;
-            break;
+        //Como hay 0x0000 es una familia de isntrucciones entonces tengo que anidar un switch para diferenciarlas
+            switch(instruccion & 0x0FF)
+            {
+                case 0x00E0:
+                    //Comando 0x00E0: Limpiar Pantalla
+                    memset(c->pantalla, 0, sizeof(c->pantalla));
+                    break;
+                
+                case 0x00EE:
+                    //Comando 00EE: Retornar
+                    c->SP -= 1; //Retrocedemos al renglon anterior
+                    c->PC = c->stack[c->SP]; //Recuperamos la direccion de retorno
+                    break;
+                
+                default:
+                    printf("Instruccion 0x0000 no reconocida: 0x%X\n", instruccion);
+                    break;
+            }
+            break; //Cierre del case principal
+    
 
         default:
         printf("Instruccion no reconocida: 0x%X\n", instruccion);
@@ -89,18 +107,61 @@ void emular_ciclo(struct Chip* c)
     }
 }
 
-int main()
-{
-    //1. Instanciamos el chip en la memoria
+int cargar_rom(struct Chip* c, const char* nombre_archivo) {
+    //abrimos el archivo en binario
+    FILE* archivo = fopen("roms/pong.ch8", "rb");
+    if (archivo == NULL) {
+        printf("Error: No se pudo abrir el arhcivo %s\n", nombre_archivo);
+        return 0;
+    }
+
+    //medimos el arhcivo
+    fseek(archivo, 0, SEEK_END); //vamos al final del archivo
+    long tamano_archivo = ftell(archivo); // preguntamos en que byte estamos 
+    rewinf(archivo); //volvemos el cursor al principio para empezar a leer
+
+    // control de calidad
+    if (tamano_archivo > (4096 - 512)) {
+        printf("Error: el ROM es demasiado grande para la memoria.");
+        fclose(archivo);
+        return 0;
+    }
+    // leer el archivo y volcarlo en la RAM con la funcion fread
+    fread(c->memoriaRAM + 512, sizeof(uint8_t), tamano_archivo, archivo);
+
+    // cerramos el archivo y salimos 
+    fclose(archivo);
+    return 1;
+}
+
+
+int main() {
+    // 1. Instanciamos el chip
     struct Chip mi_chip;
 
-    //2. Lo inicializamos (le pasamos la direccion con '&')
+    // 2. Lo inicializamos
     inicializar_chip8(&mi_chip);
     
-    //3. Hacemos arrancar todo
-    while (1)
-    {
+    // 3. Preparamos el reloj usando <time.h>
+    // Convertimos los "ticks" del sistema a milisegundos reales
+    double ultimo_tiempo = ((double)clock() / CLOCKS_PER_SEC) * 1000.0;
+    
+    // 4. El Motor Principal (Game Loop)
+    while (1) {
+        // A. Ejecutar un ciclo de CPU
         emular_ciclo(&mi_chip);
+        
+        // B. Mirar el reloj actual
+        double tiempo_actual = ((double)clock() / CLOCKS_PER_SEC) * 1000.0;
+        double tiempo_pasado = tiempo_actual - ultimo_tiempo;
+        
+        // C. Si pasaron 16.66ms (60Hz), actualizar temporizadores
+        if (tiempo_pasado >= 16.66) {
+            if (mi_chip.delay > 0) mi_chip.delay--;
+            if (mi_chip.sound > 0) mi_chip.sound--;
+            
+            ultimo_tiempo = tiempo_actual; 
+        }
     }
     return 0;
 }
