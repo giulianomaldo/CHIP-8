@@ -17,6 +17,7 @@ struct Chip
     uint8_t delay ; // Temporizador 1
     uint8_t sound ; // temporizador 2
     uint64_t pantalla [32];
+    uint8_t draw_flag;
 
     
 
@@ -81,11 +82,12 @@ void emular_ciclo(struct Chip* c)
 
         case 0x0000:
         //Como hay 0x0000 es una familia de isntrucciones entonces tengo que anidar un switch para diferenciarlas
-            switch(instruccion & 0x0FF)
+            switch(instruccion & 0x00FF)
             {
                 case 0x00E0:
                     //Comando 0x00E0: Limpiar Pantalla
                     memset(c->pantalla, 0, sizeof(c->pantalla));
+                    c->draw_flag = 1; //Avisamos que hay que limpiar la pantalla
                     break;
                 
                 case 0x00EE:
@@ -99,6 +101,21 @@ void emular_ciclo(struct Chip* c)
                     break;
             }
             break; //Cierre del case principal
+
+        case 0xD000:
+            //comando DXYN Dibujar Sprite
+            uint8_t coord_x = c->V[X] % 64;
+            uint8_t coord_y = c->V[Y] % 32;
+            //Asumo que no hay colision de bits al arrancar
+            c->V[15] = 0;
+            for (int fila = 0; fila < N; fila++) {
+                uint8_t byte_sprite = c->memoriaRAM[c->RI + fila];
+            }
+            for (int col = 0; col < 8; col++) {
+                
+            }
+            c->draw_flag = 1; // Avisamos que se agrega un dibujo
+            break;
     
 
         default:
@@ -150,12 +167,21 @@ int main() {
     while (1) {
         // A. Ejecutar un ciclo de CPU
         emular_ciclo(&mi_chip);
+
+        //B. RENDERING
+        if (mi_chip.draw_flag == 1) {
+            
+            dibujar_pantalla_real(mi_chip.pantalla);
+
+            //Bajamos la bandera
+            mi_chip.draw_flag = 0;
+        }
         
-        // B. Mirar el reloj actual
+        // C. Mirar el reloj actual
         double tiempo_actual = ((double)clock() / CLOCKS_PER_SEC) * 1000.0;
         double tiempo_pasado = tiempo_actual - ultimo_tiempo;
         
-        // C. Si pasaron 16.66ms (60Hz), actualizar temporizadores
+        // D. Si pasaron 16.66ms (60Hz), actualizar temporizadores
         if (tiempo_pasado >= 16.66) {
             if (mi_chip.delay > 0) mi_chip.delay--;
             if (mi_chip.sound > 0) mi_chip.sound--;
